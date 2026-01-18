@@ -1,0 +1,63 @@
+version: '3.8'
+
+services:
+  monoliet-mcp:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: monoliet-mcp-server
+    restart: unless-stopped
+
+    # Environment variables from .env file
+    env_file:
+      - .env
+
+    # Additional environment variables
+    environment:
+      - PYTHONUNBUFFERED=1
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - LOG_FORMAT=${LOG_FORMAT:-json}
+
+    # Port mapping
+    ports:
+      - "${MCP_SERVER_PORT:-8001}:8001"
+
+    # Networks
+    networks:
+      - web
+
+    # Health check
+    healthcheck:
+      test: ["CMD", "python", "-c", "import sys; sys.exit(0)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+    # Resource limits (adjust as needed)
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+        reservations:
+          cpus: '0.5'
+          memory: 256M
+
+    # Logging configuration
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+    # Labels for container management
+    labels:
+      - "com.monoliet.service=mcp-server"
+      - "com.monoliet.version=0.1.0"
+      - "com.monoliet.description=n8n MCP Server"
+
+# External network (must exist)
+networks:
+  web:
+    external: true
