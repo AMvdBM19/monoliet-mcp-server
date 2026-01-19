@@ -4,6 +4,7 @@ import asyncio
 import logging
 import signal
 import sys
+import os
 from typing import Any, Dict, List, Optional
 
 from mcp.server import Server
@@ -184,6 +185,136 @@ class MonolietMCPServer:
         error_message = error.get("message", "Unknown error")
         return f"Error ({error_type}): {error_message}"
 
+    async def run_stdio(self) -> None:
+        """Run the MCP server in stdio mode (for Claude Desktop)."""
+        logger.info("Running MCP server in STDIO mode...")
+
+        async with stdio_server() as (read_stream, write_stream):
+            await self.mcp_server.run(
+                read_stream,
+                write_stream,
+                self.mcp_server.create_initialization_options()
+            )
+
+    async def run_http(self) -> None:
+        """Run the MCP server in HTTP mode (for remote access)."""
+        from aiohttp import web
+
+        logger.info(f"Running MCP server in HTTP mode on {self.config.mcp_server_host}:{self.config.mcp_server_port}...")
+
+        async def handle_sse(request: web.Request) -> web.StreamResponse:
+            """Handle Server-Sent Events connection."""
+            response = web.StreamResponse()
+            response.headers['Content-Type'] = 'text/event-stream'
+            response.headers['Cache-Control'] = 'no-cache'
+            response.headers['Connection'] = 'keep-alive'
+            response.headers['Access-Control-Allow-Origin'] = '*'
+            await response.prepare(request)
+
+            try:
+                # Keep connection alive and handle MCP protocol
+                while True:
+                    await asyncio.sleep(1)
+                    await response.write(b': keepalive\n\n')
+            except Exception as e:
+                logger.error(f"SSE error: {e}")
+            finally:
+                await response.write_eof()
+
+            return response
+
+        async def handle_post(request: web.Request) -> web.Response:
+            """Handle MCP tool calls via POST."""
+            try:
+                data = await request.json()
+
+                tool_name = data.get('tool')
+                arguments = data.get('arguments', {})
+
+                if not tool_name:
+                    return web.json_response(
+                        {'error': 'Missing tool name'},
+                        status=400
+                    )
+
+                # Find and execute tool
+                tool = next((t for t in self.tools if t.name == tool_name), None)
+
+                if not tool:
+                    return web.json_response(
+                        {'error': f'Unknown tool: {tool_name}'},
+                        status=404
+                    )
+
+                result = await tool.run(arguments)
+                return web.json_response(result)
+
+            except Exception as e:
+                logger.exception(f"Error handling POST request: {e}")
+                return web.json_response(
+                    {'error': str(e)},
+                    status=500
+                )
+
+        async def handle_list_tools(request: web.Request) -> web.Response:
+            """Handle listing available tools."""
+            try:
+                tools_metadata = [tool.get_tool_metadata() for tool in self.tools]
+                return web.json_response({
+                    'tools': tools_metadata,
+                    'count': len(tools_metadata)
+                })
+            except Exception as e:
+                logger.exception(f"Error listing tools: {e}")
+                return web.json_response(
+                    {'error': str(e)},
+                    status=500
+                )
+
+        async def handle_health(request: web.Request) -> web.Response:
+            """Health check endpoint."""
+            try:
+                # Check n8n connection
+                health = await self.n8n_client.health_check()
+                return web.json_response({
+                    'status': 'healthy',
+                    'n8n': health,
+                    'tools_count': len(self.tools)
+                })
+            except Exception as e:
+                return web.json_response({
+                    'status': 'unhealthy',
+                    'error': str(e)
+                }, status=503)
+
+        # Create aiohttp application
+        app = web.Application()
+        app.router.add_get('/sse', handle_sse)
+        app.router.add_post('/call', handle_post)
+        app.router.add_get('/tools', handle_list_tools)
+        app.router.add_get('/health', handle_health)
+
+        # Run HTTP server
+        runner = web.AppRunner(app)
+        await runner.setup()
+        site = web.TCPSite(
+            runner,
+            self.config.mcp_server_host,
+            self.config.mcp_server_port
+        )
+
+        await site.start()
+        logger.info(f"HTTP server started on http://{self.config.mcp_server_host}:{self.config.mcp_server_port}")
+        logger.info("Endpoints:")
+        logger.info(f"  - POST http://{self.config.mcp_server_host}:{self.config.mcp_server_port}/call - Execute tools")
+        logger.info(f"  - GET  http://{self.config.mcp_server_host}:{self.config.mcp_server_port}/tools - List tools")
+        logger.info(f"  - GET  http://{self.config.mcp_server_host}:{self.config.mcp_server_port}/health - Health check")
+        logger.info(f"  - GET  http://{self.config.mcp_server_host}:{self.config.mcp_server_port}/sse - SSE connection")
+
+        # Wait for shutdown signal
+        await self._shutdown_event.wait()
+        await runner.cleanup()
+
     async def run(self) -> None:
         """Run the MCP server."""
         logger.info("Starting MCP server...")
@@ -202,15 +333,18 @@ class MonolietMCPServer:
             for sig in (signal.SIGTERM, signal.SIGINT):
                 loop.add_signal_handler(sig, lambda s=sig: signal_handler(s))
 
-            # Run MCP server with stdio transport
-            logger.info("MCP server ready, waiting for connections...")
+            # Determine server mode from environment or config
+            server_mode = os.environ.get('MCP_SERVER_MODE', 'stdio').lower()
 
-            async with stdio_server() as (read_stream, write_stream):
-                await self.mcp_server.run(
-                    read_stream,
-                    write_stream,
-                    self.mcp_server.create_initialization_options()
-                )
+            logger.info(f"MCP server mode: {server_mode}")
+
+            if server_mode == 'http':
+                # Run in HTTP mode for remote access
+                await self.run_http()
+            else:
+                # Run in stdio mode for Claude Desktop (default)
+                logger.info("MCP server ready, waiting for stdio connections...")
+                await self.run_stdio()
 
         except KeyboardInterrupt:
             logger.info("Received keyboard interrupt")

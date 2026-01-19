@@ -103,26 +103,58 @@ LOG_LEVEL=INFO
 3. Click **Create API Key**
 4. Copy the key to your `.env` file
 
-### 3. Run the Server
+### 3. Choose Server Mode
 
-**Local:**
-```bash
-python -m src.server
+The server supports two modes:
+
+**stdio mode** - For Claude Desktop integration (default)
+**HTTP mode** - For remote access via HTTP API
+
+```env
+# For Claude Desktop (default)
+MCP_SERVER_MODE=stdio
+
+# For remote/HTTP access
+MCP_SERVER_MODE=http
 ```
 
-**Docker:**
+### 4. Run the Server
+
+**stdio mode (Claude Desktop):**
+```bash
+python -m src.server
+# or
+./start.sh
+```
+
+**HTTP mode (Remote Access):**
+```bash
+MCP_SERVER_MODE=http python -m src.server
+```
+
+**Docker (HTTP mode by default):**
 ```bash
 docker-compose up -d
 ```
 
-### 4. Verify It's Working
+### 5. Verify It's Working
 
+**For HTTP mode:**
 ```bash
-# Check if server is running
-docker-compose ps
+# Check health
+curl http://localhost:8001/health
 
-# View logs
+# List tools
+curl http://localhost:8001/tools
+
+# View logs (Docker)
 docker-compose logs -f monoliet-mcp
+```
+
+**For stdio mode:**
+```bash
+# Check process is running
+ps aux | grep "src.server"
 ```
 
 ## ⚙️ Configuration
@@ -346,6 +378,44 @@ Then for each workflow, *uses `get_workflow_health`*
 2. *Uses `get_workflow_health` to check statistics*
 3. *Uses `get_executions` with status="error" to see recent failures*
 4. *Analyzes the error data and provides recommendations*
+
+## 🌐 HTTP API Mode
+
+The server can run in HTTP mode for remote access via REST API.
+
+### Enable HTTP Mode
+
+```bash
+# Set environment variable
+export MCP_SERVER_MODE=http
+
+# Or in .env
+MCP_SERVER_MODE=http
+```
+
+### API Endpoints
+
+- `GET /health` - Health check
+- `GET /tools` - List all available tools
+- `POST /call` - Execute a tool
+- `GET /sse` - Server-sent events stream
+
+### Example Usage
+
+```bash
+# Check health
+curl http://localhost:8001/health
+
+# List workflows
+curl -X POST http://localhost:8001/call \
+  -H "Content-Type: application/json" \
+  -d '{
+    "tool": "list_workflows",
+    "arguments": {"status": "all"}
+  }'
+```
+
+**See [HTTP_API.md](HTTP_API.md) for complete API documentation.**
 
 ## 🖥️ Integration with Claude Desktop
 

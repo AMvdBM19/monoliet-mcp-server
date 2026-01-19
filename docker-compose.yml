@@ -19,6 +19,7 @@ services:
       - PYTHONUNBUFFERED=1
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
       - LOG_FORMAT=${LOG_FORMAT:-json}
+      - MCP_SERVER_MODE=${MCP_SERVER_MODE:-http}
 
     # Port mapping
     ports:
@@ -28,9 +29,9 @@ services:
     networks:
       - web
 
-    # Health check
+    # Health check (HTTP mode)
     healthcheck:
-      test: ["CMD", "python", "-c", "import sys; sys.exit(0)"]
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health", "||", "exit", "1"]
       interval: 30s
       timeout: 10s
       retries: 3

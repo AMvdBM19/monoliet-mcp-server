@@ -8,13 +8,51 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Planned Features
+- Authentication middleware (Bearer tokens)
+- WebSocket support for real-time updates
 - Workflow template library
 - Bulk workflow operations
 - Advanced filtering and sorting
 - Workflow export/import
-- Real-time execution monitoring
 - Webhook management tools
 - Workflow versioning support
+- Rate limiting per client
+- Metrics endpoint (Prometheus)
+
+## [0.2.0] - 2026-01-19
+
+### Added - HTTP Mode Support 🌐
+- **Dual mode support**: Server can now run in either stdio or HTTP mode
+- **HTTP REST API** with 4 endpoints:
+  - `GET /health` - Server health check with n8n connectivity status
+  - `GET /tools` - List all available MCP tools
+  - `POST /call` - Execute any MCP tool via REST API
+  - `GET /sse` - Server-Sent Events endpoint for real-time updates
+- **Mode selection** via `MCP_SERVER_MODE` environment variable
+- **Complete HTTP API documentation** (HTTP_API.md)
+- **HTTP test suite** (test_http_api.py) with automated endpoint testing
+- **aiohttp integration** for async HTTP server
+- **CORS support** for development
+- **Docker pre-configured** for HTTP mode with health checks
+- **curl support** in Docker for HTTP health checks
+
+### Changed
+- Default Docker mode is now **HTTP** instead of stdio
+- Health check in Docker uses HTTP endpoint instead of Python check
+- README updated with dual-mode documentation
+- Configuration examples updated for both modes
+
+### Documentation
+- New HTTP_API.md with complete REST API documentation
+- Updated README.md with mode selection guide
+- New HTTP_MODE_UPDATE.md summarizing the changes
+- Integration examples for Python, JavaScript, and Go
+- Troubleshooting guide for HTTP mode
+
+### Infrastructure
+- Added aiohttp>=3.9.0 dependency
+- Updated Docker health check to use curl
+- Added MCP_SERVER_MODE to docker-compose.yml
 
 ## [0.1.0] - 2024-01-18
 

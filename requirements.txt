@@ -1,8 +1,9 @@
 # MCP Server Core
 mcp>=0.9.0
 
-# HTTP Client
+# HTTP Client & Server
 httpx>=0.27.0
+aiohttp>=3.9.0
 
 # Configuration
 python-decouple>=3.8
