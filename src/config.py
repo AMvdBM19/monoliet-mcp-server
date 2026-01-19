@@ -49,6 +49,11 @@ class Config(BaseSettings):
         description="Port to bind MCP server to",
         alias="MCP_SERVER_PORT"
     )
+    management_api_port: int = Field(
+        default=8002,
+        description="Port for management REST API",
+        alias="MANAGEMENT_API_PORT"
+    )
 
     # Logging Configuration
     log_level: str = Field(

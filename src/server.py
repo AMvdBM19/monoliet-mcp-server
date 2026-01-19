@@ -1,4 +1,10 @@
-"""Main MCP server for n8n workflow management."""
+"""
+Main MCP server for n8n workflow management.
+
+Runs two servers concurrently:
+1. MCP server (stdio/HTTP) for Claude integration
+2. Management REST API for Django portal integration
+"""
 
 import asyncio
 import logging
@@ -9,9 +15,11 @@ from typing import Any, Dict, List, Optional
 
 from mcp.server import Server
 from mcp.server.stdio import stdio_server
+import uvicorn
 
 from src.config import get_config
 from src.n8n_client import N8NClient
+from src.management_api import management_app
 from src.tools import (
     ListWorkflowsTool,
     GetWorkflowDetailsTool,
@@ -315,9 +323,24 @@ class MonolietMCPServer:
         await self._shutdown_event.wait()
         await runner.cleanup()
 
+    async def run_management_api(self) -> None:
+        """Run the management REST API server."""
+        config = self.config
+        logger.info(f"Starting Management API on port {config.management_api_port}...")
+
+        uvicorn_config = uvicorn.Config(
+            management_app,
+            host="0.0.0.0",
+            port=config.management_api_port,
+            log_level=config.log_level.lower()
+        )
+
+        server = uvicorn.Server(uvicorn_config)
+        await server.serve()
+
     async def run(self) -> None:
         """Run the MCP server."""
-        logger.info("Starting MCP server...")
+        logger.info("Starting Monoliet MCP Server with Management API...")
 
         try:
             # Initialize server
@@ -337,14 +360,36 @@ class MonolietMCPServer:
             server_mode = os.environ.get('MCP_SERVER_MODE', 'stdio').lower()
 
             logger.info(f"MCP server mode: {server_mode}")
+            logger.info(f"Management API port: {self.config.management_api_port}")
 
             if server_mode == 'http':
-                # Run in HTTP mode for remote access
-                await self.run_http()
+                # Run both MCP HTTP server and Management API concurrently
+                logger.info("Running in HTTP mode - both MCP and Management API servers")
+                await asyncio.gather(
+                    self.run_http(),
+                    self.run_management_api()
+                )
             else:
-                # Run in stdio mode for Claude Desktop (default)
+                # Run stdio mode for MCP, but still run Management API for Django portal
+                logger.info("Running in STDIO mode for MCP, HTTP mode for Management API")
                 logger.info("MCP server ready, waiting for stdio connections...")
-                await self.run_stdio()
+
+                # Run Management API in background
+                management_task = asyncio.create_task(self.run_management_api())
+
+                # Run stdio in foreground
+                try:
+                    await self.run_stdio()
+                except Exception as e:
+                    logger.error(f"STDIO server error: {e}")
+                    raise
+                finally:
+                    # Cancel management API when stdio exits
+                    management_task.cancel()
+                    try:
+                        await management_task
+                    except asyncio.CancelledError:
+                        pass
 
         except KeyboardInterrupt:
             logger.info("Received keyboard interrupt")

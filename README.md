@@ -169,6 +169,7 @@ ps aux | grep "src.server"
 | `N8N_MAX_RETRIES` | Max API request retries | `3` | No |
 | `MCP_SERVER_HOST` | Server bind host | `0.0.0.0` | No |
 | `MCP_SERVER_PORT` | Server bind port | `8001` | No |
+| `MANAGEMENT_API_PORT` | Management API port | `8002` | No |
 | `LOG_LEVEL` | Logging level | `INFO` | No |
 | `LOG_FORMAT` | Log format (json/console) | `json` | No |
 | `MCP_AUTH_TOKEN` | Optional auth token | - | No |
@@ -379,9 +380,86 @@ Then for each workflow, *uses `get_workflow_health`*
 3. *Uses `get_executions` with status="error" to see recent failures*
 4. *Analyzes the error data and provides recommendations*
 
+## 🔧 Management API
+
+The MCP server includes a REST API for management operations, designed specifically for integration with the Django Monoliet Portal admin panel. This API runs concurrently with the MCP server and provides administrative capabilities.
+
+### Ports
+
+- **MCP Server:** Port 8001 (MCP protocol - stdio or HTTP)
+- **Management API:** Port 8002 (REST API - always HTTP)
+
+### Key Features
+
+- **Health Monitoring:** Check server and n8n connectivity status
+- **Workflow Statistics:** Get aggregated workflow metrics
+- **Workflow Management:** Activate, deactivate, and execute workflows
+- **Configuration Viewing:** Access current server configuration (sensitive data redacted)
+- **Authentication:** Bearer token authentication for Django portal integration
+- **CORS Support:** Configured for Django portal domains
+
+### Quick Start
+
+The Management API starts automatically when you run the MCP server:
+
+```bash
+# Local development
+python -m src.server
+
+# Docker
+docker-compose up -d
+```
+
+The Management API will be available at `http://localhost:8002`
+
+### Example Endpoints
+
+```bash
+# Health check (no auth required)
+curl http://localhost:8002/health
+
+# Get workflow statistics (requires auth)
+curl -H "Authorization: Bearer your-django-token" \
+     http://localhost:8002/workflows/stats
+
+# List all workflows (requires auth)
+curl -H "Authorization: Bearer your-django-token" \
+     http://localhost:8002/workflows
+
+# Activate a workflow (requires auth)
+curl -X POST \
+     -H "Authorization: Bearer your-django-token" \
+     http://localhost:8002/workflows/abc123/activate
+```
+
+### Integration with Django Portal
+
+The Management API is designed to be consumed by the **monoliet-portal** Django admin panel:
+
+- All endpoints (except `/health`) require authentication via Django DRF tokens
+- Responses are optimized for admin UI display
+- CORS is configured for portal domains
+- Real-time workflow statistics for dashboard
+
+### Documentation
+
+See [MANAGEMENT_API.md](MANAGEMENT_API.md) for complete API documentation including:
+- All available endpoints
+- Request/response formats
+- Authentication requirements
+- Error handling
+- Integration examples
+
+### Interactive Documentation
+
+Access auto-generated API documentation:
+
+- **Swagger UI:** `http://localhost:8002/docs`
+- **ReDoc:** `http://localhost:8002/redoc`
+
 ## 🌐 HTTP API Mode
 
-The server can run in HTTP mode for remote access via REST API.
+The MCP server can run in HTTP mode for remote access via REST API (separate from the Management API).
 
 ### Enable HTTP Mode
 

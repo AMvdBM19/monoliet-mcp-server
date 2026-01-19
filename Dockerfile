@@ -49,12 +49,12 @@ ENV PATH=/home/mcp/.local/bin:$PATH
 # Set Python to run in unbuffered mode
 ENV PYTHONUNBUFFERED=1
 
-# Expose MCP server port
-EXPOSE 8001
+# Expose MCP server port and Management API port
+EXPOSE 8001 8002
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD python -c "import sys; sys.exit(0)"
+# Health check (uses Management API health endpoint)
+HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+    CMD curl -f http://localhost:8002/health || exit 1
 
 # Run the MCP server
 CMD ["python", "-m", "src.server"]
