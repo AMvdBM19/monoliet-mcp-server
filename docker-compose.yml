@@ -6,6 +6,8 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: monoliet-mcp-server
+    stdin_open: true
+    tty: true
     restart: unless-stopped
 
     # Environment variables from .env file
